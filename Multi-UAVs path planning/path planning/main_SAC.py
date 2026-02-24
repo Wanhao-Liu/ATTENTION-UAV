@@ -16,8 +16,8 @@ shoplistfile_test = '/home/lwh/UAV-path-planning/Multi-UAVs path planning/path p
 shoplistfile_test1 = '/home/lwh/UAV-path-planning/Multi-UAVs path planning/path planning/MASAC_compare'  #保存文件数据所在文件的文件名
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 N_Agent=1
-M_Enemy=1
-RENDER=False
+M_Enemy=4
+RENDER=True
 TRAIN_NUM = 1
 TEST_EPIOSDE=100
 env = RlGame(n=N_Agent,m=M_Enemy,render=RENDER).unwrapped
@@ -34,7 +34,7 @@ policy_lr = 1e-3
 BATCH = 128
 tau = 1e-2
 MemoryCapacity=20000
-Switch=0
+Switch=1
 class Ornstein_Uhlenbeck_Noise:
     def __init__(self, mu, sigma=0.1, theta=0.1, dt=1e-2, x0=None):
         self.theta = theta

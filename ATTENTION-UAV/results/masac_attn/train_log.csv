@@ -1,0 +1,8 @@
+episode,reward_total,reward_leader,reward_follower,timesteps,wall_time
+0,-37.69,-27.30,-10.39,50,0.0
+1,-25.15,-21.96,-3.19,50,0.0
+2,-23.18,-20.27,-2.91,50,0.0
+episode,reward_total,reward_leader,reward_follower,timesteps,wall_time
+0,-27.75,-23.77,-3.99,50,0.0
+1,-17.89,-16.41,-1.49,50,0.0
+2,-34.72,-24.67,-10.05,50,0.0
