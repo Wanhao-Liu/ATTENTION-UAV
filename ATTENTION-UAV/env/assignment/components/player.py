@@ -1,6 +1,3 @@
-# -*- coding: utf-8 -*-
-#开发者：Bright Fang
-#开发时间：2022/9/17 23:18
 '''说明：目前程序每更新一次，相当于现实中过去1秒，即δt=1'''
 import numpy as np
 import math

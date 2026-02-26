@@ -4,6 +4,7 @@ import os
 import sys
 import csv
 import pickle
+import random
 import argparse
 import numpy as np
 import torch
@@ -12,13 +13,14 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 from modules.agent import Actor, resolve_device
+from modules.ddpg_agent import DDPGActor
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="MASAC Ablation Test")
     parser.add_argument("--config", type=str, default="baseline",
                         choices=["baseline", "masac_per", "masac_attn",
-                                 "masac_per_attn"])
+                                 "masac_per_attn", "maddpg"])
     parser.add_argument("--leader_ckpt", type=str, default=None)
     parser.add_argument("--follower_ckpt", type=str, default=None)
     parser.add_argument("--n_agent", type=int, default=None)
@@ -42,6 +44,9 @@ def load_config(name):
     elif name == "masac_per_attn":
         from config.masac_per_attn import MasacPerAttnConfig
         return MasacPerAttnConfig()
+    elif name == "maddpg":
+        from config.maddpg import MADDPGConfig
+        return MADDPGConfig()
     else:
         raise ValueError(f"Unknown config: {name}")
 
@@ -50,6 +55,12 @@ def test():
     args = parse_args()
     cfg = load_config(args.config)
     device = resolve_device(cfg)
+
+    # 固定随机种子
+    random.seed(cfg.seed)
+    np.random.seed(cfg.seed)
+    torch.manual_seed(cfg.seed)
+    torch.cuda.manual_seed_all(cfg.seed)
 
     n_agent = args.n_agent if args.n_agent else cfg.n_agent_test
     m_enemy = args.m_enemy if args.m_enemy else cfg.m_enemy_test
@@ -75,8 +86,9 @@ def test():
         ckpt_dir, "actor_F_final.pth")
 
     actors = []
+    is_ddpg = (args.config == "maddpg")
     # Leader (agent 0)
-    leader = Actor(cfg)
+    leader = DDPGActor(cfg) if is_ddpg else Actor(cfg)
     ckpt_data = torch.load(leader_ckpt, map_location=device)
     if "net" in ckpt_data:
         leader.action_net.load_state_dict(ckpt_data["net"])
@@ -86,7 +98,7 @@ def test():
 
     # Followers (agents 1..n_total-1)
     for i in range(1, n_total):
-        follower = Actor(cfg)
+        follower = DDPGActor(cfg) if is_ddpg else Actor(cfg)
         fdata = torch.load(follower_ckpt, map_location=device)
         if "net" in fdata:
             follower.action_net.load_state_dict(fdata["net"])
@@ -99,7 +111,8 @@ def test():
 
     # 测试指标
     win_times = 0
-    all_ep_V, all_ep_U, all_ep_T, all_ep_F = [], [], [], []
+    all_ep_V, all_ep_U, all_ep_T = [], [], []
+    all_ep_score = []
     trajectories = []
     action = np.zeros((n_total, a_dim))
 
@@ -112,8 +125,10 @@ def test():
         for timestep in range(ep_len):
             for i in range(n_total):
                 if cfg.use_attention and n_total > 1:
-                    other_idx = [k for k in range(n_total) if k != i]
-                    other_obs = state[other_idx]
+                    if i == 0:
+                        other_obs = state[1:2]   # leader 只看第一个 follower
+                    else:
+                        other_obs = state[0:1]   # follower 只看 leader
                     action[i] = actors[i].choose_action(state[i], other_obs)
                 else:
                     action[i] = actors[i].choose_action(state[i])
@@ -141,25 +156,26 @@ def test():
                 break
 
         fkr = team_counter / max(timestep + 1, 1)
+        ep_score = 0.7 * int(win) + 0.3 * fkr
         all_ep_V.append(integral_V)
         all_ep_U.append(integral_U)
         all_ep_T.append(timestep + 1)
-        all_ep_F.append(fkr)
+        all_ep_score.append(ep_score)
         trajectories.append(traj_ep)
 
         if j % 10 == 0:
-            print(f"  ep={j} steps={timestep+1} win={win} FKR={fkr:.3f}")
+            print(f"  ep={j} steps={timestep+1} win={win} score={ep_score:.3f}")
 
     # 汇总
     win_rate = win_times / args.test_episodes
     avg_V = np.mean(all_ep_V)
     avg_U = np.mean(all_ep_U)
     avg_T = np.mean(all_ep_T)
-    avg_F = np.mean(all_ep_F)
+    avg_score = np.mean(all_ep_score)
 
     print(f"\n[{cfg.exp_name}] 测试结果:")
     print(f"  Win Rate: {win_rate:.2%}")
-    print(f"  Avg FKR:  {avg_F:.4f}")
+    print(f"  Score:    {avg_score:.4f}")
     print(f"  Avg V:    {avg_V:.2f}")
     print(f"  Avg U:    {avg_U:.2f}")
     print(f"  Avg T:    {avg_T:.1f}")
@@ -168,19 +184,20 @@ def test():
     csv_path = os.path.join(result_dir, "test_metrics.csv")
     with open(csv_path, "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["episode", "timesteps", "FKR", "integral_V",
+        w.writerow(["episode", "timesteps", "score", "integral_V",
                      "integral_U"])
         for j in range(args.test_episodes):
-            w.writerow([j, all_ep_T[j], f"{all_ep_F[j]:.4f}",
+            w.writerow([j, all_ep_T[j], f"{all_ep_score[j]:.4f}",
                          f"{all_ep_V[j]:.4f}", f"{all_ep_U[j]:.4f}"])
-        w.writerow(["MEAN", f"{avg_T:.1f}", f"{avg_F:.4f}",
+        w.writerow(["MEAN", f"{avg_T:.1f}", f"{avg_score:.4f}",
                      f"{avg_V:.4f}", f"{avg_U:.4f}"])
 
     # 保存 pickle
     test_data = {
         "win_rate": win_rate, "all_ep_V": all_ep_V,
         "all_ep_U": all_ep_U, "all_ep_T": all_ep_T,
-        "all_ep_F": all_ep_F, "trajectories": trajectories,
+        "all_ep_score": all_ep_score, "avg_score": avg_score,
+        "trajectories": trajectories,
         "cfg": cfg.exp_name
     }
     pkl_path = os.path.join(result_dir, "test_data.pkl")

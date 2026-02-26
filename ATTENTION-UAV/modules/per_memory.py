@@ -117,4 +117,4 @@ class PrioritizedReplayBuffer:
 
     @property
     def is_ready(self):
-        return self.tree.n_entries >= 1000
+        return self.counter > self.capacity

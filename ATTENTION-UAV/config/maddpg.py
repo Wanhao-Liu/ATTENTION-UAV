@@ -1,8 +1,9 @@
 from dataclasses import dataclass
 
+
 @dataclass
-class BaselineConfig:
-    exp_name: str = "baseline"
+class MADDPGConfig:
+    exp_name: str = "maddpg"
 
     # 环境 - 训练
     n_agent_train: int = 1
@@ -17,41 +18,33 @@ class BaselineConfig:
     max_action: float = 1.0
     min_action: float = -1.0
 
-    # 训练超参数
+    # 训练超参数（与原始 DDPG 一致）
     ep_max: int = 1000
     ep_len: int = 1000
-    gamma: float = 0.9
-    tau: float = 0.01
+    gamma: float = 0.95
+    tau: float = 0.005
     batch_size: int = 128
     memory_capacity: int = 20000
     train_num: int = 1
+    reward_scale: float = 1e-3  # 原始代码 reward/1000
 
     # 学习率
     policy_lr: float = 1e-3
-    q_lr: float = 3e-4
-    value_lr: float = 3e-3
+    critic_lr: float = 1e-3
 
-    # 网络
-    actor_hidden: int = 256
-    critic_hidden: int = 256
+    # 网络（与原始 DDPG 一致）
+    actor_hidden1: int = 50
+    actor_hidden2: int = 20
+    critic_hidden1: int = 40
+    critic_hidden2: int = 20
 
-    # Attention (默认关闭)
+    # Attention（DDPG 不使用）
     use_attention: bool = False
-    embed_dim: int = 64
-    n_heads: int = 4
-
-    # PER (默认关闭)
-    use_per: bool = False
-    per_alpha: float = 0.4
-    per_beta_start: float = 0.4
-    per_beta_end: float = 1.0
-    per_beta_steps: int = 100000
-    per_eps: float = 1e-6
 
     # 保存/日志
     save_interval: int = 20
     save_after: int = 200
-    noise_episodes: int = 20
+    noise_episodes: int = 50
 
     # OU 噪声
     ou_mu: float = 0.0

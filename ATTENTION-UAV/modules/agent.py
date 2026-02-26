@@ -58,18 +58,18 @@ class Actor:
         mean, std = self.action_net(self_obs_batch, other_obs_batch)
         dist = torch.distributions.Normal(mean, std)
         noise = torch.distributions.Normal(0, 1)
-        z = noise.sample(mean.shape).to(self.device)
+        z = noise.sample()
         action = torch.tanh(mean + std * z)
         action = torch.clamp(action, self.min_action, self.max_action)
         log_prob = dist.log_prob(mean + std * z) - torch.log(
             1 - action.pow(2) + 1e-6
         )
-        log_prob = log_prob.sum(dim=-1, keepdim=True)  # [batch, 1]
         return action, log_prob
 
     def learn(self, actor_loss):
         self.optimizer.zero_grad()
         actor_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.action_net.parameters(), max_norm=0.5)
         self.optimizer.step()
 
 

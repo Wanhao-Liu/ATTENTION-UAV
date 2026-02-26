@@ -4,6 +4,7 @@ import os
 import sys
 import csv
 import time
+import random
 import argparse
 import pickle
 import numpy as np
@@ -65,6 +66,12 @@ def train():
     # 设备
     device = resolve_device(cfg)
 
+    # 固定随机种子
+    random.seed(cfg.seed)
+    np.random.seed(cfg.seed)
+    torch.manual_seed(cfg.seed)
+    torch.cuda.manual_seed_all(cfg.seed)
+
     # 结果目录
     result_dir = os.path.join(ROOT, "results", cfg.exp_name)
     ckpt_dir = os.path.join(result_dir, "checkpoints")
@@ -108,9 +115,11 @@ def train():
         else:
             buffer = Memory(capacity=cfg.memory_capacity, dims=mem_dims)
 
-        # OU 噪声
-        ou_noises = [OrnsteinUhlenbeckNoise(a_dim, cfg.ou_mu,
-                     cfg.ou_theta, cfg.ou_sigma) for _ in range(n_total)]
+        # OU 噪声 — 全局一个实例，与原始一致
+        ou_noise = OrnsteinUhlenbeckNoise(
+            mu=np.zeros((n_total, a_dim)),
+            sigma=cfg.ou_sigma, theta=cfg.ou_theta, dt=cfg.ou_dt
+        )
 
         # 断点续训
         start_ep = 0
@@ -124,11 +133,10 @@ def train():
                 print(f"  从 episode {start_ep} 恢复")
 
         # CSV 日志
-        csv_file = open(csv_path, "a", newline="")
+        csv_file = open(csv_path, "w", newline="")
         writer = csv.writer(csv_file)
-        if start_ep == 0:
-            writer.writerow(["episode", "reward_total", "reward_leader",
-                             "reward_follower", "timesteps", "wall_time"])
+        writer.writerow(["episode", "reward_total", "reward_leader",
+                         "reward_follower", "timesteps", "wall_time"])
 
         t_start = time.time()
 
@@ -139,21 +147,19 @@ def train():
             reward_r1 = 0.0
             action = np.zeros((n_total, a_dim))
 
-            for ou in ou_noises:
-                ou.reset()
-
             for step in range(cfg.ep_len):
                 for i in range(n_total):
                     obs_i = observation[i]
-                    if episode < cfg.noise_episodes:
-                        action[i] = ou_noises[i].noise()
+                    if cfg.use_attention and n_total > 1:
+                        other_idx = [j for j in range(n_total) if j != i]
+                        other_obs = observation[other_idx]
+                        action[i] = actors[i].choose_action(obs_i, other_obs)
                     else:
-                        if cfg.use_attention and n_total > 1:
-                            other_idx = [j for j in range(n_total) if j != i]
-                            other_obs = observation[other_idx]
-                            action[i] = actors[i].choose_action(obs_i, other_obs)
-                        else:
-                            action[i] = actors[i].choose_action(obs_i)
+                        action[i] = actors[i].choose_action(obs_i)
+
+                if episode <= cfg.noise_episodes:
+                    action = action + ou_noise()
+                action = np.clip(action, -cfg.max_action, cfg.max_action)
 
                 observation_, reward, done, win, team_counter, d = \
                     env.step(action)
@@ -221,7 +227,7 @@ def train():
                         # TD error for PER
                         with torch.no_grad():
                             td_err = torch.abs(
-                                cq1 - target_q.detach()).squeeze(-1).cpu().numpy()
+                                cq1 - target_q.detach()).mean(dim=-1).cpu().numpy()
                             td_err = np.atleast_1d(td_err)
                         td_errors_all.append(td_err)
 
@@ -241,6 +247,7 @@ def train():
                             log_p + entroys[i].target_entropy
                         ).detach()).mean()
                         entroys[i].learn(alpha_loss)
+                        entroys[i].alpha = entroys[i].log_alpha.exp()
 
                         # soft update
                         critics[i].soft_update()
@@ -255,7 +262,7 @@ def train():
                 reward_total += float(sum(reward))
                 reward_r0 += float(reward[0])
                 if n_total > 1:
-                    reward_r1 += float(reward[1])
+                    reward_r1 += float(np.mean(reward[1:]))
 
                 observation = observation_
                 if done:

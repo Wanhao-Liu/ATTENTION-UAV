@@ -85,6 +85,10 @@ class AttnActorNet(nn.Module):
         self.mean_out = nn.Linear(hidden, action_dim)
         self.std_out = nn.Linear(hidden, action_dim)
 
+        # 仅对 MLP 输出头做 normal_(0,0.1)，保留 obs_encoder/attn 的默认初始化
+        for layer in [self.fc1, self.fc2, self.mean_out, self.std_out]:
+            layer.weight.data.normal_(0, 0.1)
+
     def forward(self, self_obs, other_obs=None):
         """
         self_obs:  (batch, obs_dim)

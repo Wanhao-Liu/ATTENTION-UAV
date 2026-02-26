@@ -1,6 +1,3 @@
-# -*- coding: utf-8 -*-
-#开发者：Bright Fang
-#开发时间：2022/9/17 18:23
 import pygame
 from env.assignment import constants as C
 import os

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from config.baseline import BaselineConfig
 from dataclasses import dataclass
 

@@ -27,4 +27,4 @@ class Memory:
 
     @property
     def is_ready(self):
-        return self.counter >= self.capacity
+        return self.counter > self.capacity
