@@ -1,6 +1,5 @@
 # ATTENTION-UAV
-python 3.8
-基于 MASAC（Multi-Agent Soft Actor-Critic）的多无人机协同路径规划框架，支持 PER（优先经验回放）和 Cross-Attention 机制的消融实验。
+基于 MASAC（Multi-Agent Soft Actor-Critic）的多无人机协同路径规划框架，支持 PER（优先经验回放）和 Cross-Attention 机制的消融实验。(python 3.8)
 
 ## 项目结构
 
