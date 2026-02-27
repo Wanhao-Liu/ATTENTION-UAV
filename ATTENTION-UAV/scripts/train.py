@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-"""ATTENTION-UAV 统一训练脚本"""
 import os
 import sys
 import csv

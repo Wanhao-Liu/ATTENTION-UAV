@@ -1,6 +1,4 @@
-# -*- coding: utf-8 -*-
-#开发者：Bright Fang
-#开发时间：2022/9/17 18:22
+
 import pygame
 import random
 CREATE_ENEMY_EVENT=pygame.USEREVENT
